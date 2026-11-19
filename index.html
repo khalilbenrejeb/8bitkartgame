@@ -35,7 +35,7 @@ button:hover{background:#ff5a67}
 <div id="mp" class="scr"><h1 class="s">🌐 MULTIPLAYER</h1><input id="nm" maxlength="14" placeholder="YOUR NAME" style="font:inherit;font-size:16px;padding:12px;border:4px solid #fff;background:#0b1a4a;color:#fff;text-align:center;width:230px"><div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:center"><button id="mhost">HOST A GAME</button><label style="font-size:10px;cursor:pointer"><input type="checkbox" id="pubc" checked> Public room<br><span style="opacity:.7">(friends see it in the list)</span></label></div>
 <div style="width:min(480px,92vw)"><div id="rhead" style="font-size:11px;margin-bottom:8px;color:#ffd33d"></div><div id="rlist" style="display:flex;flex-direction:column;gap:6px;max-height:28vh;overflow:auto"></div></div>
 <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center"><span style="font-size:10px">Private code:</span><input id="jc" maxlength="5" placeholder="CODE" style="font:inherit;font-size:16px;padding:12px;border:4px solid #fff;background:#0b1a4a;color:#fff;text-align:center;width:230px;width:120px;text-transform:uppercase"><button id="mjoin">JOIN</button></div><div id="mps" style="font-size:10px;min-height:14px;color:#ffd33d"></div><button id="b5" style="background:#444">BACK</button></div>
-<div id="lb" class="scr"><h1 class="s">LOBBY</h1><div id="lcode" style="font-size:24px;color:#ffd33d"></div><div id="lplayers" style="font-size:12px;line-height:2.2"></div><div id="lmaps" style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;max-width:780px"></div><div id="lmap" style="font-size:12px"></div><div><button id="lstart">START RACE</button> <button id="lleave" style="background:#444">LEAVE</button></div></div>
+<div id="lb" class="scr"><h1 class="s">LOBBY</h1><div id="lcode" style="font-size:24px;color:#ffd33d"></div><div id="lplayers" style="font-size:12px;line-height:2.2"></div><div id="lmaps" style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;max-width:780px"></div><div id="lcd" style="font-size:16px;color:#ffd33d;min-height:22px"></div><div id="lmap" style="font-size:10px;opacity:.85"></div><div><button id="lstart">START NOW</button> <button id="lleave" style="background:#444">LEAVE</button></div></div>
 <div id="res" class="scr"><h1 class="s" id="rt"></h1><div id="rl" style="font-size:12px;line-height:2.2"></div><div><button id="again">RACE AGAIN</button> <button id="tomenu">MENU</button></div></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
@@ -351,7 +351,7 @@ $('rs').onclick=resumeGame;
 $('rst2').onclick=()=>{spk0();bank();inc('quit');save();$('ps').classList.remove('on');if(AC)AC.resume();hideAll();setup(MAP)};
 $('qt').onclick=()=>{spk0();bank();inc('quit');save();if(AC)AC.resume();toMenu()};
 function mul32(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
-const newNet=()=>({on:false,racing:false,host:false,mq:null,cid:'',cl:{},busy:0,hostSeen:0,pub:true,players:[],map:0,id:0,seed:0,code:'',tm:0,firstFin:0,ended:false});
+const newNet=()=>({on:false,racing:false,host:false,mq:null,cid:'',cl:{},busy:0,hostSeen:0,pub:true,votes:{},cdEnd:0,cdRem:0,cd:-1,lastAct:0,lastCd:-2,how:'',players:[],map:0,id:0,seed:0,code:'',tm:0,firstFin:0,ended:false});
 let NET=newNet(),myName='',shN=0;const BOTN=['Bolt','Nova','Pixel','Blaze','Turbo','Zoom'],BOTC=[0xe63946,0x2a9df4,0x2ecc71,0xb36bff,0xff8a00,0xff5fa8];
 const esc=t=>String(t).replace(/[&<>"'`]/g,c=>'&#'+c.charCodeAt(0)+';'),num=v=>Number.isFinite(v)?v:0;
 const cleanName=n=>String(n||'').replace(/[^\p{L}\p{N} _.\-]/gu,'').trim().slice(0,14)||'Player';
@@ -377,26 +377,30 @@ function buildCfg(arr,my){return arr.map((e,k)=>{const h=!!e.h,eq=h?(e.id==my?cu
 function mpErr(msg){NET.busy=0;$('mps').textContent=msg;popT(msg);if(!NET.on){const c=NET.mq;NET.mq=null;try{c&&c.end(true)}catch(e){}NET=newNet()}if($('mp').classList.contains('on'))mpBrowse()}
 function mpLeave(){const c=NET.mq;try{if(c&&c.connected){if(NET.host){advert(true);pub(T('all'),{t:'hostbye'})}else pub(T('h'),{t:'bye',c:NET.cid});setTimeout(()=>{try{c.end(true)}catch(e){}},250)}else if(c)c.end(true)}catch(e){}NET=newNet()}
 function hostLeft(msg){if(!NET.on)return;if(NET.racing)bank();mpLeave();toMenu();popT(msg||'The host left the game')}
-function dropClient(cid){const c=NET.cl[cid];if(!c)return;delete NET.cl[cid];NET.players=NET.players.filter(p=>p.id!=c.pid);if(NET.racing){const k=ks[c.pid];if(k){k.net=false;k.ty='bot';k.skill=.95}}lobbyBroadcast()}
-function renderLobby(){$('lcode').textContent=(NET.host?'ROOM CODE: ':'ROOM ')+NET.code;$('lplayers').innerHTML=NET.players.map(p=>`${p.id==0?'👑':'🏎️'} ${esc(p.name)}${p.id==NET.id?' (you)':''}`).join('<br>')+`<br><span style="font-size:9px;opacity:.7">${6-NET.players.length} bot(s) will fill the grid</span>`;$('lmap').textContent='Map: '+MN[NET.map];$('lmaps').style.display=NET.host?'flex':'none';$('lstart').style.display=NET.host?'inline-block':'none';[...$('lmaps').children].forEach((b,i)=>b.style.outline=i==NET.map?'4px solid #ffd33d':'none')}
-function lobbyBroadcast(){sendAll({t:'lobby',players:NET.players.map(p=>({id:p.id,name:p.name})),map:NET.map});advert();renderLobby()}
-function mpToLobby(){NET.racing=false;state='menu';hideAll();show('lb');renderLobby();music(11)}
-function mpStart(){NET.seed=Math.random()*1e9|0;const arr=[];for(let k=0;k<6;k++){const p=NET.players.find(x=>x.id==k);arr.push(p?{id:k,n:p.name,h:1,eq:p.eq}:{id:k,n:BOTN[k],h:0})}
-sendAll({t:'start',map:NET.map,seed:NET.seed,players:arr});hideAll();setup(NET.map,{host:true,seed:NET.seed,cfg:buildCfg(arr,0)});advert()}
+function dropClient(cid){const c=NET.cl[cid];if(!c)return;delete NET.cl[cid];NET.players=NET.players.filter(p=>p.id!=c.pid);delete NET.votes[c.pid];NET.lastAct=performance.now();if(NET.players.length<2)NET.cdEnd=0;if(NET.racing){const k=ks[c.pid];if(k){k.net=false;k.ty='bot';k.skill=.95}}lobbyBroadcast()}
+function renderLobby(){$('lcode').textContent=(NET.host?'ROOM CODE: ':'ROOM ')+NET.code;$('lplayers').innerHTML=NET.players.map(p=>`${p.id==0?'👑':'🏎️'} ${esc(p.name)}${p.id==NET.id?' (you)':''}`).join('<br>')+`<br><span style="font-size:9px;opacity:.7">${6-NET.players.length} bot(s) will fill the grid</span>`;
+const cnt=Array(MN.length).fill(0),V=NET.votes||{};Object.values(V).forEach(m=>{if(m>=0&&m<cnt.length)cnt[m]++});[...$('lmaps').children].forEach((b,i)=>{b.textContent=MN[i]+(cnt[i]?' ('+cnt[i]+')':'');b.style.outline=V[NET.id]===i?'4px solid #ffd33d':'none'});
+$('lmap').textContent='Vote for the map! Most votes wins - ties are picked at random.';const cd=NET.host?(NET.cdEnd?NET.cdRem:-1):NET.cd;$('lcd').textContent=cd>=0?'🏁 Race starts in '+cd+'...':(NET.players.length<2?'Waiting for more players...':'');
+if(cd!==NET.lastCd){NET.lastCd=cd;if(cd>=1&&cd<=3&&state=='menu')sfx.beep(660)}$('lmaps').style.display='flex';$('lstart').style.display=NET.host?'inline-block':'none'}
+function lobbyBroadcast(){sendAll({t:'lobby',players:NET.players.map(p=>({id:p.id,name:p.name})),map:NET.map,votes:NET.votes,cd:NET.cdEnd?NET.cdRem:-1});advert();renderLobby()}
+function mpToLobby(){NET.racing=false;state='menu';hideAll();show('lb');music(11);if(NET.host){NET.votes={};NET.lastAct=performance.now();if(NET.players.length>=2){NET.cdEnd=NET.lastAct+20000;NET.cdRem=20}lobbyBroadcast()}else{NET.votes={};renderLobby()}}
+function mpStart(){NET.lastAct=performance.now();NET.seed=Math.random()*1e9|0;const arr=[];for(let k=0;k<6;k++){const p=NET.players.find(x=>x.id==k);arr.push(p?{id:k,n:p.name,h:1,eq:p.eq}:{id:k,n:BOTN[k],h:0})}
+sendAll({t:'start',map:NET.map,seed:NET.seed,players:arr,how:NET.how});hideAll();setup(NET.map,{host:true,seed:NET.seed,cfg:buildCfg(arr,0)});advert();voteMsg(NET.how)}
 function hostMsg(m){if(!m||typeof m!='object'||typeof m.c!='string'||m.c.length>16)return;const cl=NET.cl[m.c];
-if(m.t=='hello'){if(cl)return;if(m.v!==GV){sendTo(m.c,{t:'ver'});return}if(NET.racing||NET.players.length>=6){sendTo(m.c,{t:'full'});return}let id=1;while(NET.players.some(p=>p.id==id))id++;NET.cl[m.c]={pid:id,last:performance.now()};NET.players.push({id,name:cleanName(m.name),eq:cleanEq(m.eq)});sendTo(m.c,{t:'welcome',id,code:NET.code});lobbyBroadcast();return}
+if(m.t=='hello'){if(cl)return;if(m.v!==GV){sendTo(m.c,{t:'ver'});return}if(NET.racing||NET.players.length>=6){sendTo(m.c,{t:'full'});return}let id=1;while(NET.players.some(p=>p.id==id))id++;NET.cl[m.c]={pid:id,last:performance.now()};NET.players.push({id,name:cleanName(m.name),eq:cleanEq(m.eq)});sendTo(m.c,{t:'welcome',id,code:NET.code});NET.lastAct=performance.now();NET.cdEnd=NET.lastAct+10000;NET.cdRem=10;lobbyBroadcast();return}
 if(!cl)return;cl.last=performance.now();
 if(m.t=='bye')dropClient(m.c);
+else if(m.t=='vote'&&!NET.racing){const i=m.m|0;if(i>=0&&i<MN.length){NET.votes[cl.pid]=i;NET.lastAct=performance.now();lobbyBroadcast()}}
 else if(m.t=='st'&&NET.racing){const k=ks[cl.pid];if(k&&k.net)setNet(k,[cl.pid,m.d,m.lat,m.v,m.b,m.s,m.n,m.f])}
 else if(m.t=='shell'&&NET.racing){const o=ks[cl.pid],tg=ks[m.tg|0];if(o&&o.net){const id=String(m.id).slice(0,12);spawnShell(o,num(m.d),num(m.lat),tg&&tg!==o?tg:null,id);sendAll({t:'shell',id,o:cl.pid,d:num(m.d),lat:num(m.lat),tg:m.tg})}}
 else if(m.t=='shrm'){const id=String(m.id).slice(0,12);rmShell(id);sendAll({t:'shrm',id})}}
 function clientMsg(m){if(!m||typeof m!='object')return;
 if(m.t=='welcome'){NET.on=true;NET.busy=0;NET.id=m.id|0;NET.hostSeen=performance.now();show('lb');renderLobby();music(11)}
-else if(m.t=='hostbye')hostLeft()
-else if(m.t=='lobby'){NET.players=(m.players||[]).slice(0,6).map(p=>({id:p.id|0,name:cleanName(p.name)}));NET.map=cl(m.map|0,0,MN.length-1);if(NET.on)renderLobby()}
+else if(m.t=='hostbye')hostLeft(m.why=='idle'?'Room closed due to inactivity':undefined)
+else if(m.t=='lobby'){NET.players=(m.players||[]).slice(0,6).map(p=>({id:p.id|0,name:cleanName(p.name)}));NET.map=cl(m.map|0,0,MN.length-1);const v={};if(m.votes&&typeof m.votes=='object')for(const k in m.votes){const p=k|0,i=m.votes[k]|0;if(p>=0&&p<6&&i>=0&&i<MN.length)v[p]=i}NET.votes=v;NET.cd=m.cd|0;if(NET.on)renderLobby()}
 else if(m.t=='full')mpErr('Room is full or already racing')
 else if(m.t=='ver')mpErr('Different game version - refresh the page and try again')
-else if(m.t=='start'&&NET.on&&Array.isArray(m.players)&&m.players.length==6){NET.map=cl(m.map|0,0,MN.length-1);hideAll();setup(NET.map,{host:false,seed:m.seed|0,cfg:buildCfg(m.players,NET.id)})}
+else if(m.t=='start'&&NET.on&&Array.isArray(m.players)&&m.players.length==6){NET.map=cl(m.map|0,0,MN.length-1);hideAll();setup(NET.map,{host:false,seed:m.seed|0,cfg:buildCfg(m.players,NET.id)});voteMsg(m.how)}
 else if(m.t=='snap'&&NET.racing&&ks.length&&Array.isArray(m.a))m.a.forEach(a=>{const k=ks[a[0]|0];if(k&&k.net)setNet(k,a)})
 else if(m.t=='shell'&&NET.racing){const o=ks[m.o|0],tg=ks[m.tg|0];if(o&&o.net)spawnShell(o,num(m.d),num(m.lat),tg&&tg!==o?tg:null,String(m.id).slice(0,12))}
 else if(m.t=='shrm')rmShell(String(m.id).slice(0,12))
@@ -404,7 +408,7 @@ else if(m.t=='end'&&NET.racing&&Array.isArray(m.order))mpEnd(m.order)}
 function mpHost(){if(typeof mqtt=='undefined')return mpErr('Online mode needs internet (the network library failed to load)');if(NET.mq||NET.busy)return;NET.busy=1;NET.pub=$('pubc').checked;mpBrowseStop();$('mps').textContent='Creating room...';
 const r4=Array.from({length:4},()=>'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.random()*24|0]).join(''),cs=[];let done=false,fails=0;
 BRK.forEach((url,i)=>{const code=BL[i]+r4,c=mqtt.connect(url,{clientId:'tkh'+Math.random().toString(36).slice(2,10),keepalive:10,reconnectPeriod:0,connectTimeout:7000,will:{topic:'tkart26/'+code+'/all',payload:JSON.stringify({t:'hostbye'}),qos:0}});cs.push(c);
-c.on('connect',()=>{if(done){try{c.end(true)}catch(e){}return}done=true;cs.forEach(o=>{if(o!==c)try{o.end(true)}catch(e){}});NET.mq=c;NET.code=code;NET.host=true;NET.on=true;NET.busy=0;NET.id=0;NET.players=[{id:0,name:myName,eq:curEq()}];NET.cl={};
+c.on('connect',()=>{if(done){try{c.end(true)}catch(e){}return}done=true;cs.forEach(o=>{if(o!==c)try{o.end(true)}catch(e){}});NET.mq=c;NET.code=code;NET.host=true;NET.on=true;NET.busy=0;NET.id=0;NET.players=[{id:0,name:myName,eq:curEq()}];NET.cl={};NET.votes={};NET.cdEnd=0;NET.lastAct=performance.now();
 c.subscribe(T('h'),()=>{});c.on('message',(t,b)=>onMsg(b));c.on('close',()=>{if(NET.mq===c&&NET.on)hostLeft('Lost connection to the server')});show('lb');renderLobby();music(11);advert()});
 c.on('error',()=>{});c.on('close',()=>{if(!done&&++fails>=BRK.length)mpErr('Could not reach any server. Check your internet and try again.')})})}
 function mpJoin(code){if(typeof mqtt=='undefined')return mpErr('Online mode needs internet (the network library failed to load)');if(NET.mq||NET.busy)return;const bi=BL.indexOf(code[0]);if(bi<0)return mpErr('Invalid room code');NET.busy=1;mpBrowseStop();$('mps').textContent='Connecting...';NET.code=code;NET.cid=Math.random().toString(36).slice(2,10);
@@ -421,14 +425,20 @@ c.on('message',(t,b)=>{const code=t.split('/')[2]||'',str=b.toString();if(!/^[AB
 function drawRooms(){const now=performance.now(),L=Object.values(ROOMS).filter(r=>now-r.seen<14000&&r.v===GV);$('rhead').textContent=L.length?'🌐 '+L.reduce((a,r)=>a+r.n,0)+' player(s) in '+L.length+' open room(s)':(BR.length?'No open rooms right now - host one!':'');$('rlist').innerHTML='';
 L.forEach(r=>{const d=document.createElement('div');d.className='c';d.style.cssText='display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:10px;text-align:left';d.innerHTML=`<span>${esc(r.h)}'s room<br><span style="opacity:.7">${esc(MN[r.m])} · ${r.n}/6 players${r.r?' · IN RACE':''}</span></span>`;const b=document.createElement('button');b.className='kb';const full=r.r||r.n>=6;b.textContent=full?'FULL':'JOIN';b.disabled=!!full;b.onclick=()=>{const n=mpCheckName();if(!n)return;myName=n;mpJoin(r.code)};d.appendChild(b);$('rlist').appendChild(d)})}
 setInterval(()=>{if($('mp').classList.contains('on'))drawRooms()},3000);
+function tally(){const cnt=Array(MN.length).fill(0);Object.values(NET.votes).forEach(m=>{if(m>=0&&m<cnt.length)cnt[m]++});const mxv=Math.max(...cnt);if(!mxv)return{m:Math.random()*MN.length|0,how:'random'};const tops=cnt.map((c,i)=>c==mxv?i:-1).filter(i=>i>=0);return{m:tops[Math.random()*tops.length|0],how:tops.length>1?'tie':'vote'}}
+function mpStartVote(){if(!NET.host||NET.racing)return;const t=tally();NET.map=t.m;NET.how=t.how;NET.cdEnd=0;mpStart()}
+function voteMsg(h){popT(MN[NET.map]+(h=='vote'?' won the vote!':h=='tie'?' - tie, picked at random!':' - random map!'))}
+function mpVote(i){if(!NET.on||NET.racing)return;NET.lastAct=performance.now();if(NET.host){NET.votes[0]=i;lobbyBroadcast()}else{NET.votes=Object.assign({},NET.votes,{[NET.id]:i});renderLobby();pub(T('h'),{t:'vote',c:NET.cid,m:i})}}
+function closeRoom(){popT('Room closed due to inactivity');pub(T('all'),{t:'hostbye',why:'idle'});mpLeave();show('mp');mpBrowse()}
+setInterval(()=>{if(!NET.on||!NET.host||NET.racing)return;const now=performance.now();if(NET.cdEnd){const rem=Math.max(0,Math.ceil((NET.cdEnd-now)/1000));if(rem!==NET.cdRem){NET.cdRem=rem;lobbyBroadcast()}if(now>=NET.cdEnd)mpStartVote()}else if(now-NET.lastAct>300000)closeRoom()},500);
 function mpCheckName(){const n=cleanName($('nm').value);if($('nm').value.trim().length<2){popT('Enter a name (2+ letters)');return null}try{localStorage.turboName=n}catch(e){}return n}
 $('nm').value=(()=>{try{return localStorage.turboName||''}catch(e){return''}})();
-MN.forEach((n,i)=>{const b=document.createElement('button');b.className='kb';b.textContent=n;b.onclick=()=>{if(NET.host){NET.map=i;lobbyBroadcast()}};$('lmaps').appendChild(b)});
+MN.forEach((n,i)=>{const b=document.createElement('button');b.className='kb';b.textContent=n;b.onclick=()=>mpVote(i);$('lmaps').appendChild(b)});
 $('multi').onclick=()=>{initA();$('mps').textContent='';show('mp');music(11);mpBrowse()};
 $('b5').onclick=()=>{mpBrowseStop();show('menu');music(4)};
 $('mhost').onclick=()=>{const n=mpCheckName();if(n){myName=n;mpHost()}};
 $('mjoin').onclick=()=>{const n=mpCheckName(),c=$('jc').value.trim().toUpperCase();if(!n)return;if(!/^[ABC][A-Z]{4}$/.test(c)){popT('Enter the 5-letter room code');return}myName=n;mpJoin(c)};
-$('lstart').onclick=()=>{if(NET.host&&!NET.racing)mpStart()};
+$('lstart').onclick=()=>{if(NET.host&&!NET.racing)mpStartVote()};
 $('lleave').onclick=()=>{mpLeave();show('mp');$('mps').textContent='';mpBrowse()};
 let lbT=0,mmB,mm,podG,conf,podT=0,podP=[],podDone=false,podMsg=false;
 function mmBuild(){const c=document.createElement('canvas');c.width=c.height=160;const x=c.getContext('2d');let a=1e9,b=-1e9,d=1e9,e=-1e9;TK.p.forEach(p=>{a=Math.min(a,p.x);b=Math.max(b,p.x);d=Math.min(d,p.z);e=Math.max(e,p.z)});const z=130/Math.max(b-a,e-d);mm={a,d,s:z,ox:(160-(b-a)*z)/2,oy:(160-(e-d)*z)/2};x.strokeStyle='#fff';x.lineWidth=6;x.lineJoin='round';x.beginPath();TK.p.forEach((p,i)=>{const X=mm.ox+(p.x-a)*z,Y=mm.oy+(p.z-d)*z;i?x.lineTo(X,Y):x.moveTo(X,Y)});x.closePath();x.stroke();mmB=c}
